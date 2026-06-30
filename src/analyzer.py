@@ -18,33 +18,38 @@ ACTIVOS = {
 }
 
 def obtener_datos(ticker: str) -> dict:
-    df = yf.download(ticker, period="3mo", interval="1d", progress=False, auto_adjust=True)
-    if df.empty or len(df) < 20:
+    try:
+        t = yf.Ticker(ticker)
+        df = t.history(period="3mo", interval="1d")
+        if df.empty or len(df) < 20:
+            return None
+
+        close = df["Close"].squeeze()
+
+        rsi   = round(float(ta.momentum.RSIIndicator(close, window=14).rsi().iloc[-1]), 1)
+        macd_obj = ta.trend.MACD(close)
+        macd_line   = round(float(macd_obj.macd().iloc[-1]), 4)
+        macd_signal = round(float(macd_obj.macd_signal().iloc[-1]), 4)
+        sma20 = round(float(ta.trend.SMAIndicator(close, window=20).sma_indicator().iloc[-1]), 2)
+        sma50 = round(float(ta.trend.SMAIndicator(close, window=50).sma_indicator().iloc[-1]), 2)
+
+        precio_actual = round(float(close.iloc[-1]), 2)
+        precio_ayer   = round(float(close.iloc[-2]), 2)
+        cambio_pct    = round((precio_actual - precio_ayer) / precio_ayer * 100, 2)
+
+        return {
+            "ticker":      ticker,
+            "precio":      precio_actual,
+            "cambio_pct":  cambio_pct,
+            "rsi":         rsi,
+            "macd":        macd_line,
+            "macd_signal": macd_signal,
+            "sma20":       sma20,
+            "sma50":       sma50,
+        }
+    except Exception as e:
+        print(f"Error obteniendo {ticker}: {e}")
         return None
-
-    close = df["Close"].squeeze()
-
-    rsi   = round(float(ta.momentum.RSIIndicator(close, window=14).rsi().iloc[-1]), 1)
-    macd_obj = ta.trend.MACD(close)
-    macd_line   = round(float(macd_obj.macd().iloc[-1]), 4)
-    macd_signal = round(float(macd_obj.macd_signal().iloc[-1]), 4)
-    sma20 = round(float(ta.trend.SMAIndicator(close, window=20).sma_indicator().iloc[-1]), 2)
-    sma50 = round(float(ta.trend.SMAIndicator(close, window=50).sma_indicator().iloc[-1]), 2)
-
-    precio_actual = round(float(close.iloc[-1]), 2)
-    precio_ayer   = round(float(close.iloc[-2]), 2)
-    cambio_pct    = round((precio_actual - precio_ayer) / precio_ayer * 100, 2)
-
-    return {
-        "ticker":      ticker,
-        "precio":      precio_actual,
-        "cambio_pct":  cambio_pct,
-        "rsi":         rsi,
-        "macd":        macd_line,
-        "macd_signal": macd_signal,
-        "sma20":       sma20,
-        "sma50":       sma50,
-    }
 
 
 def analizar_con_claude(datos: dict, nombre: str) -> str:
@@ -52,7 +57,7 @@ def analizar_con_claude(datos: dict, nombre: str) -> str:
 
     prompt = f"""Eres un asesor financiero conservador para un inversor chileno principiante con menos de $500 USD.
 
-Analiza este activo y da una recomendación clara: COMPRAR, MANTENER o ESPERAR (no vender agresivamente).
+Analiza este activo y da una recomendación clara: COMPRAR, MANTENER o ESPERAR.
 
 Activo: {datos['ticker']} - {nombre}
 Precio actual: ${datos['precio']} USD
@@ -63,9 +68,9 @@ SMA 20 días: {datos['sma20']} | SMA 50 días: {datos['sma50']}
 
 Responde en español, máximo 4 líneas. Formato:
 SEÑAL: [COMPRAR / MANTENER / ESPERAR]
-RAZÓN: [1-2 oraciones explicando por qué]
+RAZÓN: [1-2 oraciones]
 RIESGO: [Bajo / Medio / Alto]
-CONSEJO: [Una acción concreta para el inversor]"""
+CONSEJO: [Una acción concreta]"""
 
     message = client.messages.create(
         model="claude-sonnet-4-6",
@@ -99,6 +104,7 @@ def correr_analisis():
     for ticker, nombre in ACTIVOS.items():
         datos = obtener_datos(ticker)
         if not datos:
+            print(f"Sin datos para {ticker}, saltando.")
             continue
         analisis = analizar_con_claude(datos, nombre)
         if es_senal_relevante(datos, analisis):
@@ -121,3 +127,4 @@ def correr_analisis():
 
 if __name__ == "__main__":
     correr_analisis()
+
