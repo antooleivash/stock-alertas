@@ -1,7 +1,7 @@
 import os
 import yfinance as yf
 import pandas as pd
-import pandas_ta as ta
+import ta
 import anthropic
 import requests
 from datetime import datetime
@@ -24,30 +24,26 @@ def obtener_datos(ticker: str) -> dict:
 
     close = df["Close"].squeeze()
 
-    rsi_series = ta.rsi(close, length=14)
-    macd_obj   = ta.macd(close, fast=12, slow=26, signal=9)
-    sma20      = ta.sma(close, length=20)
-    sma50      = ta.sma(close, length=50)
-
-    rsi   = round(float(rsi_series.iloc[-1]),   1) if rsi_series   is not None else None
-    macd_line   = round(float(macd_obj["MACD_12_26_9"].iloc[-1]),   4) if macd_obj is not None else None
-    macd_signal = round(float(macd_obj["MACDs_12_26_9"].iloc[-1]),  4) if macd_obj is not None else None
-    sma20_val   = round(float(sma20.iloc[-1]),  2) if sma20 is not None else None
-    sma50_val   = round(float(sma50.iloc[-1]),  2) if sma50 is not None else None
+    rsi   = round(float(ta.momentum.RSIIndicator(close, window=14).rsi().iloc[-1]), 1)
+    macd_obj = ta.trend.MACD(close)
+    macd_line   = round(float(macd_obj.macd().iloc[-1]), 4)
+    macd_signal = round(float(macd_obj.macd_signal().iloc[-1]), 4)
+    sma20 = round(float(ta.trend.SMAIndicator(close, window=20).sma_indicator().iloc[-1]), 2)
+    sma50 = round(float(ta.trend.SMAIndicator(close, window=50).sma_indicator().iloc[-1]), 2)
 
     precio_actual = round(float(close.iloc[-1]), 2)
     precio_ayer   = round(float(close.iloc[-2]), 2)
     cambio_pct    = round((precio_actual - precio_ayer) / precio_ayer * 100, 2)
 
     return {
-        "ticker":        ticker,
-        "precio":        precio_actual,
-        "cambio_pct":    cambio_pct,
-        "rsi":           rsi,
-        "macd":          macd_line,
-        "macd_signal":   macd_signal,
-        "sma20":         sma20_val,
-        "sma50":         sma50_val,
+        "ticker":      ticker,
+        "precio":      precio_actual,
+        "cambio_pct":  cambio_pct,
+        "rsi":         rsi,
+        "macd":        macd_line,
+        "macd_signal": macd_signal,
+        "sma20":       sma20,
+        "sma50":       sma50,
     }
 
 
@@ -81,11 +77,7 @@ CONSEJO: [Una acción concreta para el inversor]"""
 
 def enviar_telegram(mensaje: str):
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-    payload = {
-        "chat_id": TELEGRAM_CHAT_ID,
-        "text": mensaje,
-        "parse_mode": "Markdown"
-    }
+    payload = {"chat_id": TELEGRAM_CHAT_ID, "text": mensaje, "parse_mode": "Markdown"}
     r = requests.post(url, json=payload, timeout=10)
     r.raise_for_status()
 
@@ -108,9 +100,7 @@ def correr_analisis():
         datos = obtener_datos(ticker)
         if not datos:
             continue
-
         analisis = analizar_con_claude(datos, nombre)
-
         if es_senal_relevante(datos, analisis):
             bloque = (
                 f"📊 *{ticker}* — {nombre}\n"
@@ -126,7 +116,7 @@ def correr_analisis():
         enviar_telegram(mensaje)
         print(f"[{hora}] {len(alertas)} alerta(s) enviadas.")
     else:
-        print(f"[{hora}] Sin señales relevantes. No se envió mensaje.")
+        print(f"[{hora}] Sin señales relevantes.")
 
 
 if __name__ == "__main__":
