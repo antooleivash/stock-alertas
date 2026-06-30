@@ -82,7 +82,7 @@ CONSEJO: [Una acción concreta]"""
 
 def enviar_telegram(mensaje: str):
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-    payload = {"chat_id": TELEGRAM_CHAT_ID, "text": mensaje, "parse_mode": "Markdown"}
+    payload = {"chat_id": TELEGRAM_CHAT_ID, "text": mensaje}
     r = requests.post(url, json=payload, timeout=10)
     r.raise_for_status()
 
